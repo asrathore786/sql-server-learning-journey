@@ -1,5 +1,4 @@
 /*
-
 SQL Practice — Task 22
 Intermediate → Advanced
 SQL Server 2022
