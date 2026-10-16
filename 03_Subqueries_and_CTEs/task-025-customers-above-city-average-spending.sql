@@ -51,8 +51,6 @@ SELECT
 	T.city,
 	AVG(T.TotalCustomerSpending) AS CityAverageSpending
 FROM TotalSpending T
-LEFT JOIN Orders o
-	ON o.CustomerID = T.CustomerID
 GROUP BY T.city
 )
 
