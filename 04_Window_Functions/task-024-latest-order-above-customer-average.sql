@@ -65,5 +65,6 @@ SELECT
 FROM CTE_LatestOrder CL
 INNER JOIN CTE_AverageOrder CA
 	ON CL.CustomerID = CA.CustomerID
-	AND CL.LatestOrderAmount > CA.AverageOrderAmount
 	WHERE CL.LatestOrder =  CL.OrderDate
+	AND CL.LatestOrderAmount > CA.AverageOrderAmount
+ORDER BY CL.CustomerID
