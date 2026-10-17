@@ -52,7 +52,7 @@ SELECT
 	C.CustomerID,
 	C.CustomerName,
 	C.City,
-	DATETRUNC(month,C.OrderMonth),
+	C.OrderMonth,
 	C.MonthlyCustomerSpending,
 	A.MonthlyAverageSpending
 FROM CustomerSpending C
