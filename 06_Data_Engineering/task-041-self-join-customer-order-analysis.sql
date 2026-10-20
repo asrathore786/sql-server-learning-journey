@@ -58,8 +58,6 @@ Your turn: Write the query independently and run it in SSMS. Share your SQL and 
 
 */
 
-
-
 WITH Order_Summary AS
 (
 SELECT
@@ -87,6 +85,7 @@ SELECT
 	LaterOrderAmount,
 	LaterOrderAmount - EarlierOrderAmount AS AmountIncrease
 FROM Order_Summary
+
 ORDER BY CustomerID ASC,
 		EarlierOrderDate ASC,
 		LaterOrderDate ASC
