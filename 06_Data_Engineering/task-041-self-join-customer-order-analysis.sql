@@ -73,9 +73,8 @@ SELECT
 FROM Orders First
 	INNER JOIN Orders Second
 		ON Second.CustomerID = First.CustomerID
-		AND First.OrderDate < Second.OrderDate
+        AND First.OrderDate < Second.OrderDate
 		AND First.TotalAmount < Second.TotalAmount
-		AND First.OrderID <> Second.OrderID
 )
 
 SELECT 
