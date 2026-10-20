@@ -142,3 +142,59 @@ WHERE
 ORDER BY 
   customerid ASC, 
   ordermonth ASC OPTION (maxrecursion 32767);
+
+  /*
+  ## Task 046 — Validation result
+
+Status: Passed. Your output is consistent with the three-calendar-month rolling revenue requirement.
+
+Your results demonstrate that the query correctly handles missing months, includes zero revenue in the calculations, and calculates the rolling metrics independently for each customer.
+
+### Validation checks
+
+| Check                                                           | Result |
+| --------------------------------------------------------------- | ------ |
+| One output row per active customer-month                        | ✅      |
+| Missing calendar months treated as zero                         | ✅      |
+| First active month includes two preceding zero-revenue months   | ✅      |
+| Rolling total covers three calendar months                      | ✅      |
+| Rolling average divides by three, including zero-revenue months | ✅      |
+| Customers' calculations remain separate                         | ✅      |
+| Output sorted by customer and month                             | ✅      |
+
+For example, Customer 1's January 2023 result is:
+
+- Monthly revenue: `100.37`
+- Three-month revenue: `100.37`
+- Three-month average: `33.456666`
+
+This is correct because November and December 2022 have zero revenue in the generated calendar.
+
+For March 2023:
+
+- January revenue: `100.37`
+- February revenue: `655.37`
+- March revenue: `1210.37`
+- Three-month revenue: `1966.11`
+- Three-month average: `655.37`
+
+That confirms the rolling window is operating over calendar months, rather than merely the previous two months containing orders.
+
+## Final task record
+
+Filename: `task-046-moving-three-month-revenue-average.sql` Folder: `06_Data_Engineering` Database: `DataEngineeringPracticeDB_Lite`
+
+Keep your final query as the version that begins the calendar two months before each customer's first active month. That adjustment is what makes the first active month's rolling calculation valid.
+
+### Git commands
+
+After saving the final query in your repository, run:
+
+```
+git add 06_Data_Engineering/task-046-moving-three-month-revenue-average.sql
+git commit -m "Complete task 046: moving three-month revenue average"
+git push origin main
+```
+
+Task 046 is complete from the query and output review. Git commit and push are not yet confirmed.
+*/
