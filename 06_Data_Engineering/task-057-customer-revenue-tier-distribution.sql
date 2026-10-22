@@ -96,7 +96,6 @@ FROM (VALUES
 	('No Revenue',4)
 	) AS Tiers(RevenueTier, TierOrder)
 )
-
 SELECT
 	T.RevenueTier,
 	COALESCE(S.CustomerCount, 0) AS CustomerCount,
@@ -108,3 +107,53 @@ FROM ALL_Tiers T
 LEFT JOIN RevenueTiers S
 	ON T.RevenueTier = S.RevenueTier
 ORDER BY T.TierOrder;
+
+
+/*
+
+## Task 057 — Validation result
+
+Status: Complete at the query-logic and supplied-output level. Your output contains all four required revenue tiers, and the calculations are internally consistent.
+
+| Validation                   | Result                      |
+| ---------------------------- | --------------------------- |
+| Total customers              | 20                          |
+| Customer percentages         | 100.00%                     |
+| Total tier revenue           | ₹410,500.00                 |
+| Revenue tier ordering        | Correct                     |
+| Zero-revenue customers       | 2                           |
+| Average revenue calculations | Correct to 2 decimal places |
+
+Your tier counts reconcile: \\(4 + 5 + 9 + 2 = 20\\). The tier revenues also reconcile: ₹306,000 + ₹79,000 + ₹25,500 + ₹0 = ₹410,500.
+
+The output confirms that your query returned all four tiers for this dataset. It does not independently establish that the exact ₹10,000 and ₹20,000 boundary cases exist in the underlying test data.
+
+## Final task record
+
+Filename: `task-057-customer-revenue-tier-distribution.sql`
+
+Folder: `06_Data_Engineering`
+
+What you learned
+
+- Separating customer-level aggregation from revenue-tier aggregation using CTEs.
+- Using `VALUES` to define a fixed reporting dimension.
+- Using `LEFT JOIN` to preserve categories with no matching data.
+- Using `NULLIF` to protect against division by zero.
+- Using decimal arithmetic to preserve percentage and average precision.
+
+What to remember: `GROUP BY` returns categories found in the data; a predefined category list combined with a `LEFT JOIN` lets you report categories that have no matching records.
+
+Save your final validated query in the task file. Then stage, commit, and push it to your repository using these commands in PowerShell:
+
+```
+git add "06_Data_Engineering/task-057-customer-revenue-tier-distribution.sql"
+git commit -m "Complete task 057 customer revenue tier distribution"
+git push origin main
+```
+
+These commands have not been executed by me.
+
+Task 057 is complete.
+
+*/
