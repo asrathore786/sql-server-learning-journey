@@ -62,12 +62,11 @@ SELECT
 FROM Orders O
 GROUP BY O.CustomerID
 )
-
 SELECT
 	C.CustomerID,
 	C.TotalOrders,
-	ROUND(C.TotalOrderValue,0),
-	CAST(C.AverageOrderValue AS DECIMAL(10,2)),
+	C.TotalOrderValue,
+	CAST(C.AverageOrderValue AS DECIMAL(10,2)) AS AverageOrderValue,
 	C.FirstOrderDate,
 	C.LastOrderDate,
 	CASE
@@ -78,8 +77,3 @@ SELECT
 	END AS CustomerValueSegment
 FROM Customer_Order_Details C
 ORDER BY C.TotalOrderValue DESC, C.CustomerID ASC
-
---- Premium: Total order value is greater than ₹20,000.
---- Standard: Total order value is between ₹10,000 and ₹20,000, inclusive.
---- Basic: Total order value is greater than ₹0 but less than ₹10,000.
---- No Value: Total order value is ₹0.

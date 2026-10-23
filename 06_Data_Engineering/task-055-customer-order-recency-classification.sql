@@ -69,7 +69,6 @@ SELECT
 	MIN(O.OrderDate) AS FirstOrderDate,
 	MAX(O.OrderDate) AS LastOrderDate
 FROM BeforeDateOrders O
-WHERE O.CustomerID = 1
 GROUP BY O.CustomerID
 )
 

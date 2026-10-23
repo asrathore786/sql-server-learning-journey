@@ -120,3 +120,70 @@ LEFT JOIN ALL_Tier A
 ORDER BY 
 	A.TierOrder,
 	CustomerRankWithinTier
+/*
+
+## Task 058 — Query review
+
+Status: Logically correct, and the output is consistent with the expected calculations. Your latest version fixes the denominator issue and uses `100.0` to ensure decimal arithmetic for the percentages.
+
+### 1. Output validation
+
+| Validation            | Your result | Assessment |
+| --------------------- | ----------- | ---------- |
+| Total customers       | 20          | ✅          |
+| Premium customers     | 4           | ✅          |
+| Standard customers    | 5           | ✅          |
+| Basic customers       | 9           | ✅          |
+| No Revenue customers  | 2           | ✅          |
+| Total company revenue | ₹410,500.00 | ✅          |
+| Premium tier revenue  | ₹306,000.00 | ✅          |
+| Standard tier revenue | ₹79,000.00  | ✅          |
+| Basic tier revenue    | ₹25,500.00  | ✅          |
+| Sum of tier revenues  | ₹410,500.00 | ✅          |
+
+The tier totals reconcile:
+
+\\[ 306{,}000 + 79{,}000 + 25{,}500 = 410{,}500 \\]
+
+Your customer contribution percentages also look correct. For example, Vihaan Rao contributes 49.02% of Premium revenue and 36.54% of total company revenue.
+
+### 2. What you did well
+
+- Used a `LEFT JOIN` to retain customers with no qualifying orders.
+- Applied the report-date filter before aggregation, including the entire reporting date.
+- Classified revenue using the correct tier boundaries.
+- Used window aggregates to calculate company-wide and tier-level revenue.
+- Used `NULLIF()` to avoid division-by-zero errors for the No Revenue tier.
+- Applied deterministic ranking with `ROW_NUMBER()`, using revenue descending and `CustomerID` ascending as the tie-breaker.
+
+### 3. Two refinements
+
+First: Your current final `ORDER BY A.TierOrder` sorts tiers correctly, but it does not guarantee customer ranking order within each tier. Add `T.CustomerRankWithinTier` as a secondary sort key. Since `CustomerRankWithinTier` is calculated in the same `SELECT`, use an outer query or CTE if you want to reference that alias reliably in the final ordering.
+
+Second: Your No Revenue customers correctly show `NULL` for `CustomerTierContributionPct` because the tier revenue denominator is zero. This is consistent with your requirement to return `NULL` when the denominator is zero.
+
+### 4. Final task record
+
+## Task 058 — Completed
+
+Difficulty: Advanced · Database: DataEngineeringPracticeDB_Lite
+
+Filename: `task-058-customer-revenue-contribution-by-tier.sql`
+
+Folder: `06_Data_Engineering`
+
+Key learning: Calculate window aggregates from the correct level of detail. A customer-level value, tier-level total, and company-level total are different measures; summing a higher-level total repeatedly can inflate results.
+
+### 5. Git commands
+
+After saving the final query in the file above, run these commands from your repository root in PowerShell:
+
+```
+git add "06_Data_Engineering/task-058-customer-revenue-contribution-by-tier.sql"
+git commit -m "Complete task 058 customer revenue contribution by tier"
+git push origin main
+```
+
+These commands have not been executed. Your SQL output has been reviewed based on the results you supplied; the remaining refinements are about deterministic ordering, not the revenue calculations.
+
+*/
