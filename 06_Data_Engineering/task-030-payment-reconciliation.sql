@@ -208,6 +208,7 @@ ON O.CustomerID = S.CustomerID
 GROUP BY 
     O.customerID,
     S.SuccessfulPaymentAmount
+ORDER BY O.CustomerID;
 
 /*
 
