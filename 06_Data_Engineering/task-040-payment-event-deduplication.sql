@@ -110,6 +110,7 @@ I will not assign Task 41 until you explicitly request it.
 
 --SELECT * FROM #PaymentEventIngestion
 
+/*
 
 WITH DeduplicatedEvents AS
 (
@@ -135,7 +136,6 @@ ORDER BY
     EventTimestamp ASC,
     IngestionID ASC
 
-/*
 
 ## Task 40 — Final SQL Review ✅
 
@@ -246,6 +246,8 @@ I will wait for your explicit instruction before assigning Task 41.
 */
 
 
+ 
+/*
 
 SELECT 
     P1.IngestionID,
@@ -269,8 +271,6 @@ ORDER BY
     P1.paymentID ASC,
     P1.EventTimestamp ASC,
     P1.IngestionID ASC
- 
-/*
 
 ## Task 40 — Correlated Subquery: Final Verification ✅
 
@@ -324,5 +324,105 @@ git push
 Task 40 is officially closed, including the additional subquery exercise.
 
 I will wait for your instruction before assigning Task 41.
+
+*/
+
+SELECT
+    P1.IngestionID,
+    P1.PaymentID,
+    P1.EventType,
+    P1.EventTimestamp,
+    P1.ReceivedAt
+FROM #PaymentEventIngestion P1
+LEFT JOIN #PaymentEventIngestion P2
+    ON P1.PaymentID = P2.PaymentID
+    AND P1.EventType = P2.EventType
+    AND P1.EventTimestamp = P2.EventTimestamp
+    AND P2.IngestionID < P1.IngestionID
+WHERE P2.IngestionID IS NULL
+ORDER BY
+    P1.PaymentID,
+    P1.EventTimestamp,
+    P1.IngestionID;
+
+/*
+
+## Task 40 — SELF JOIN: Final SQL Review
+
+SQL logic score
+
+# 10/10
+
+Status
+
+Logic verified
+
+Your revised query is 100% correct for Task 40's deduplication requirements.
+
+### 1. Technical review
+
+| Validation                         | Result |
+| ---------------------------------- | ------ |
+| Correct `LEFT JOIN`                | Pass   |
+| Three-column business key          | Pass   |
+| Earlier ingestion identification   | Pass   |
+| `P2.IngestionID < P1.IngestionID`  | Pass   |
+| `P2.IngestionID IS NULL`           | Pass   |
+| No unnecessary subquery            | Pass   |
+| Correct output columns and sorting | Pass   |
+
+### 2. Expected output validation
+
+Based on the original 16 records:
+
+- Expected retained records: 10
+- Expected excluded duplicates: 6
+- Expected retained ingestion IDs: `101, 103, 104, 105, 107, 110, 111, 112, 114, 115`
+
+The SQL logic is verified. Actual execution verification remains pending until you share your SSMS result.
+
+### 3. Why this works
+
+The key condition is:
+
+```
+AND P2.IngestionID < P1.IngestionID
+```
+
+This finds earlier records with the same business key.
+
+Then:
+
+```
+WHERE P2.IngestionID IS NULL
+```
+
+This retains only records for which no earlier matching ingestion record exists.
+
+This technique is called a LEFT ANTI JOIN pattern.
+
+### 4. Task 40 — Learning record
+
+| Approach                         | Score |
+| -------------------------------- | ----- |
+| `ROW_NUMBER()`                   | 10/10 |
+| Correlated subquery with `MIN()` | 10/10 |
+| `LEFT JOIN ... IS NULL`          | 10/10 |
+
+Important learning: You have now implemented the same deduplication requirement using three different SQL techniques. The next skill is understanding when to choose each approach based on readability, indexing, and execution plans.
+
+### 5. Git checkpoint
+
+Save the third approach in your existing Task 40 file:
+
+`06_Data_Engineering/task-040-payment-event-deduplication.sql`
+
+```
+git add 06_Data_Engineering/task-040-payment-event-deduplication.sql
+git commit -m "Add self join anti-join solution to Task 40"
+git push
+```
+
+Task 40's three SQL implementations are complete. No new task will be assigned until you request one.
 
 */
