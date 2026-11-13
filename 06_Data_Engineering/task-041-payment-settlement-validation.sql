@@ -130,7 +130,7 @@ SELECT
     CASE
         WHEN COALESCE(P.TotalSettledAmount,0) = 0 THEN 'NOT_SETTLED'
         WHEN COALESCE(P.TotalSettledAmount,0) < B.PaymentAmount THEN 'PARTIALLY_SETTLED'
-        WHEN B.PaymentAmount - COALESCE(P.TotalSettledAmount,0) < B.PaymentAmount THEN 'OVER_SETTLED'
+        WHEN COALESCE(P.TotalSettledAmount,0) > B.PaymentAmount THEN 'OVER_SETTLED'
     END AS SettlementStatus
 FROM #BankPayments B
 LEFT JOIN TotalAmount P
@@ -260,5 +260,47 @@ Task 41: 10/10 — Completed.
 You successfully combined CTE aggregation, conditional filtering, a `LEFT JOIN`, NULL handling, and reconciliation classification in one solution.
 
 I will wait for your instruction before assigning Task 42.
+
+## Task 41 — Final CASE Correction ✅
+
+Final score
+
+# 10/10
+
+Status
+
+Completed
+
+Your revised `CASE` expression is correct for the Task 41 dataset.
+
+| Condition                      | Classification      | Result |
+| ------------------------------ | ------------------- | ------ |
+| Settled amount = 0             | `NOT_SETTLED`       | Pass   |
+| Settled amount < PaymentAmount | `PARTIALLY_SETTLED` | Pass   |
+| Settled amount > PaymentAmount | `OVER_SETTLED`      | Pass   |
+
+The conditions now directly reflect the reconciliation business rules.
+
+One production consideration: A negative net settlement amount would currently be classified as `PARTIALLY_SETTLED`. That is outside the exercise dataset but would require separate handling in a production banking system.
+
+### Learning record
+
+You corrected the over-settlement comparison without changing the rest of your working query. This demonstrates better precision in translating business rules into conditional SQL.
+
+Task 41: 10/10 — Closed. The previously submitted output was verified; this final correction has been reviewed logically.
+
+### Git checkpoint
+
+Save the corrected `CASE` expression in:
+
+`06_Data_Engineering/task-041-payment-settlement-validation.sql`
+
+```
+git add 06_Data_Engineering/task-041-payment-settlement-validation.sql
+git commit -m "Complete Task 41 payment settlement reconciliation"
+git push
+```
+
+I will wait for your instruction before assigning the next task.
 
 */
