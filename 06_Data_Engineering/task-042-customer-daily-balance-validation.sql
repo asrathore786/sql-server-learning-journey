@@ -159,7 +159,7 @@ WITH DaysCount
 AS
 (
 SELECT AccountID AS AccountID,
-    DATEDIFF(Day,'2026-10-01','2026-10-05') + 1 AS ExpectedDays,
+    DATEDIFF(Day,'2026-09-30','2026-10-05') AS ExpectedDays,
     COUNT(BALANCEDATE) AS WithDuplicate,
     COUNT(DISTINCT BALANCEDATE) AS ActualDays,
     DATEDIFF(DAY,MIN(BalanceDate),MAX(BalanceDate)) + 1 AS DateDiff
@@ -168,6 +168,7 @@ WHERE BalanceDate BETWEEN '2026-10-01' AND '2026-10-05'
 GROUP BY
     AccountID
 )
+
 SELECT 
     D.AccountID,
     B.CustomerID,
@@ -181,14 +182,13 @@ SELECT
         WHEN
             D.ActualDays = D.ExpectedDays AND D.WithDuplicate > D.ExpectedDays THEN 'DUPLICATE_RECORDS'
         WHEN
-            D.ExpectedDays != D.WithDuplicate AND D.ActualDays < D.ExpectedDays THEN 'MISSING_AND_DUPLICATE'
+            D.ExpectedDays = D.WithDuplicate AND D.ActualDays < D.ExpectedDays THEN 'MISSING_AND_DUPLICATE'
     END AS ValidationStatus
-FROM #BankAccounts B
-LEFT JOIN DaysCount D
+FROM DaysCount D
+LEFT JOIN #BankAccounts B
     ON B.AccountID = D.AccountID
-WHERE D.ExpectedDays - D.ActualDays =D.ExpectedDays 0 AND D.ActualDays = 0
-AND B.CustomerID IS NOT NULL
-ORDER BY D.AccountID ASC
+WHERE NOT (D.ActualDays = D.ExpectedDays AND D.WithDuplicate = D.ExpectedDays)
+ORDER BY D.AccountID ASC ;
 
 
 --| AccountID | CustomerID | ExpectedDays | ActualDays | MissingDays | DuplicateRecords | ValidationStatus      |
@@ -200,3 +200,193 @@ ORDER BY D.AccountID ASC
 --| 1007      | 207        | 5            | 1          | 4           | 0                | MISSING_DAYS          |
 --| 1008      | 208        | 5            | 5          | 0           | 2                | DUPLICATE_RECORDS     |
 
+
+
+WITH ReportingPeriod AS (
+    -- Step 1: Define the inclusive reporting window once. This produces one
+    -- row of dates that is used to scope accounts and balance records below.
+    SELECT 
+        CAST('2026-10-01' AS DATE) AS StartDate,
+        CAST('2026-10-05' AS DATE) AS EndDate
+),
+AccountsInScope AS (
+    -- Step 2: Attach the reporting window and expected calendar-day count to
+    -- every account. This preserves accounts with no balance rows for Step 3.
+    SELECT 
+        ba.AccountID,
+        ba.CustomerID,
+        rp.StartDate,
+        rp.EndDate,
+        DATEDIFF(DAY, rp.StartDate, rp.EndDate) + 1 AS ExpectedDays
+    FROM 
+        #BankAccounts ba
+    CROSS JOIN 
+        ReportingPeriod rp 
+),
+BalanceStats AS (
+    -- Step 3: Keep all in-scope accounts with a LEFT JOIN, count distinct
+    -- balance dates for coverage, and count extra records as duplicates.
+    -- This produces one statistics row per account for classification next.
+    SELECT 
+        aa.AccountID,
+        aa.CustomerID,
+        aa.ExpectedDays,
+        COUNT(DISTINCT dab.BalanceDate) AS ActualDays,
+        COUNT(dab.BalanceRecordID) - COUNT(DISTINCT dab.BalanceDate) AS DuplicateRecords
+    FROM 
+        AccountsInScope aa
+    LEFT JOIN 
+        #DailyAccountBalances dab ON aa.AccountID = dab.AccountID 
+            AND dab.BalanceDate BETWEEN aa.StartDate AND aa.EndDate
+    GROUP BY 
+        aa.AccountID, aa.CustomerID, aa.ExpectedDays
+),
+ValidationResults AS (
+    -- Step 4: Calculate missing days and independently classify missing and
+    -- duplicate issues. The final query uses NULL status to exclude clean rows.
+    SELECT 
+        bs.AccountID,
+        bs.CustomerID,
+        bs.ExpectedDays,
+        bs.ActualDays,
+        (bs.ExpectedDays - bs.ActualDays) AS MissingDays,
+        bs.DuplicateRecords,
+        CASE 
+            WHEN (bs.ExpectedDays - bs.ActualDays) > 0 AND bs.DuplicateRecords > 0 THEN 'MISSING_AND_DUPLICATE'
+            WHEN (bs.ExpectedDays - bs.ActualDays) > 0 THEN 'MISSING_DAYS'
+            WHEN bs.DuplicateRecords > 0 THEN 'DUPLICATE_RECORDS'
+            ELSE NULL
+        END AS ValidationStatus
+    FROM 
+        BalanceStats bs
+)
+
+-- Step 5: Return only accounts with issues, in the requested account order.
+SELECT 
+    vr.AccountID,
+    vr.CustomerID,
+    vr.ExpectedDays,
+    vr.ActualDays,
+    vr.MissingDays,
+    vr.DuplicateRecords,
+    vr.ValidationStatus
+FROM 
+    ValidationResults vr
+WHERE
+    vr.ValidationStatus IS NOT NULL
+ORDER BY 
+    vr.AccountID;
+
+/*
+
+## Task 42 — Final SQL Review: Attempt 4
+
+SQL logic score
+
+# 10/10
+
+Status
+
+Logic passed
+
+Your fourth attempt resolves all the issues identified in the previous reviews. The query is logically correct, including for accounts with zero balance records and accounts with both missing dates and multiple duplicates.
+
+### 1. Technical validation
+
+| Requirement                              | Assessment |
+| ---------------------------------------- | ---------- |
+| Inclusive reporting period               | Pass       |
+| ExpectedDays calculated independently    | Pass       |
+| All bank accounts preserved              | Pass       |
+| Distinct balance dates counted           | Pass       |
+| Duplicate records calculated             | Pass       |
+| Missing dates calculated                 | Pass       |
+| Both conditions classified independently | Pass       |
+| Clean accounts excluded                  | Pass       |
+| Correct output grain                     | Pass       |
+| Deterministic ordering                   | Pass       |
+
+### 2. Expected output
+
+Your SQL should return these six rows using the supplied Task 42 dataset.
+
+| AccountID | CustomerID | ExpectedDays | ActualDays | MissingDays | DuplicateRecords | ValidationStatus      |
+| --------- | ---------- | ------------ | ---------- | ----------- | ---------------- | --------------------- |
+| 1002      | 202        | 5            | 4          | 1           | 0                | MISSING_DAYS          |
+| 1003      | 203        | 5            | 5          | 0           | 1                | DUPLICATE_RECORDS     |
+| 1004      | 204        | 5            | 3          | 2           | 0                | MISSING_DAYS          |
+| 1005      | 205        | 5            | 4          | 1           | 1                | MISSING_AND_DUPLICATE |
+| 1007      | 207        | 5            | 1          | 4           | 0                | MISSING_DAYS          |
+| 1008      | 208        | 5            | 5          | 0           | 2                | DUPLICATE_RECORDS     |
+
+The output is predicted from the query and provided data. Actual SSMS execution has not been independently verified for Attempt 4.
+
+### 3. What improved
+
+A. Correct population preservation
+
+```
+FROM #BankAccounts ba
+CROSS JOIN ReportingPeriod rp
+```
+
+This ensures every account receives the reporting period and expected day count, regardless of whether it has any balance records.
+
+B. Correct placement of date filtering
+
+```
+LEFT JOIN #DailyAccountBalances dab
+    ON aa.AccountID = dab.AccountID
+    AND dab.BalanceDate BETWEEN aa.StartDate AND aa.EndDate
+```
+
+This is an important improvement. Keeping the date filter in `ON` preserves accounts with no matching balance records.
+
+C. Correct classification
+
+```
+CASE
+    WHEN MissingDays > 0 AND DuplicateRecords > 0
+        THEN 'MISSING_AND_DUPLICATE'
+    WHEN MissingDays > 0
+        THEN 'MISSING_DAYS'
+    WHEN DuplicateRecords > 0
+        THEN 'DUPLICATE_RECORDS'
+    ELSE NULL
+END
+```
+
+This illustrates your implemented logic, with the two measures expressed by their calculated names.
+
+The conditions are now based on independent validation rules rather than specific combinations in the sample data.
+
+### 4. Correction points / learning log
+
+| Attempt   | Score | Main issue                                            |
+| --------- | ----- | ----------------------------------------------------- |
+| Attempt 1 | 7/10  | CASE logic and account preservation                   |
+| Attempt 2 | 8/10  | Missing NULL handling and classification edge cases   |
+| Attempt 3 | 8/10  | Unnecessary customer filter; unresolved NULL handling |
+| Attempt 4 | 10/10 | All identified logic issues resolved                  |
+
+The most significant improvement is your handling of LEFT JOIN cardinality and zero-match records.
+
+You also separated the query into distinct stages: reporting period, account population, aggregation, and validation. This makes the logic easier to test and maintain.
+
+One observation: this fourth attempt is substantially more structured and heavily commented than your earlier versions. If you used outside assistance to construct it, that is useful for learning, but your independent proficiency should be assessed separately. The 10/10 score applies to the submitted SQL, not necessarily to unaided execution.
+
+### 5. Git checkpoint
+
+File: `06_Data_Engineering/task-042-customer-daily-balance-validation.sql`
+
+```
+git add 06_Data_Engineering/task-042-customer-daily-balance-validation.sql
+git commit -m "Complete Task 42 customer daily balance validation"
+git push
+```
+
+Task 42: SQL logic accepted — 10/10. Share the actual SSMS output if you want execution verification recorded as well.
+
+I will not assign Task 43 until you request it.
+
+*/
