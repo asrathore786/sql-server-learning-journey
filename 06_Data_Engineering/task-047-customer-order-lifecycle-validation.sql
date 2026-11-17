@@ -176,10 +176,407 @@ I will assess it out of 10 based on event sequencing, transition validation, NUL
 
 */
 
+WITH OrderedEvents AS (
 SELECT
     EventID,
     OrderID,
     EventDateTime,
-    OrderStatus,
-    DENSE_RANK() OVER(PARTITION BY OrderID ORDER BY EventDateTime ASC, EventID ASC) AS RNK
+    OrderStatus AS CurrentStatus,
+    LAG(OrderStatus) OVER (PARTITION BY OrderID ORDER BY EventDateTime, EventID) AS PreviousStatus
 FROM #OrderStatusEvents
+),
+InvalidTransitions AS (
+    SELECT
+        OrderID,
+        EventID,
+        EventDateTime,
+        PreviousStatus,
+        CurrentStatus,
+        CASE 
+            WHEN PreviousStatus IS NULL AND CurrentStatus <> 'CREATED' THEN 'INVALID_INITIAL_STATUS'
+            WHEN PreviousStatus = 'CREATED' AND CurrentStatus NOT IN ('CONFIRMED', 'CANCELLED') THEN 'INVALID_TRANSITION'
+            WHEN PreviousStatus = 'CONFIRMED' AND CurrentStatus NOT IN ('SHIPPED', 'CANCELLED') THEN 'INVALID_TRANSITION'
+            WHEN PreviousStatus = 'SHIPPED' AND CurrentStatus <> 'DELIVERED' THEN 'INVALID_TRANSITION'
+            WHEN PreviousStatus IN ('DELIVERED', 'CANCELLED') THEN 'INVALID_TRANSITION'
+            WHEN PreviousStatus = CurrentStatus THEN 'INVALID_TRANSITION'
+            ELSE NULL
+        END AS ValidationStatus
+    FROM OrderedEvents
+)
+
+SELECT  
+    OrderID,
+    EventID,
+    EventDateTime,
+    PreviousStatus,
+    CurrentStatus,
+    ValidationStatus
+FROM 
+    InvalidTransitions
+WHERE 
+    ValidationStatus IS NOT NULL
+ORDER BY 
+    OrderID, EventDateTime, EventID;
+
+/*
+
+## **Task 47 — SQL Review: Attempt 1**
+
+Final score
+
+# **10/10**
+
+Status
+
+Passed — First Attempt
+
+Your SQL is correct, and your submitted SSMS output matches **all 8 expected invalid events**.
+
+You successfully translated the order-lifecycle rules into event-level validation without losing the original sequence of events.
+
+## **1. Technical assessment**
+
+| Evaluation criterion                | Result |
+| ----------------------------------- | ------ |
+| Event ordering by date and EventID  | Pass   |
+| Independent validation per OrderID  | Pass   |
+| Previous status identification      | Pass   |
+| Invalid initial status detection    | Pass   |
+| Invalid forward transitions         | Pass   |
+| Backward transitions                | Pass   |
+| Repeated status detection           | Pass   |
+| Terminal status enforcement         | Pass   |
+| Correct output columns and ordering | Pass   |
+| Actual SSMS output                  | Pass   |
+
+## **2. Output verification**
+
+Your result contains exactly the expected invalid events.
+
+| OrderID | EventID | ValidationStatus       | Result |
+| ------- | ------- | ---------------------- | ------ |
+| 1002    | 202     | INVALID_TRANSITION     |        |
+| 1003    | 303     | INVALID_TRANSITION     |        |
+| 1004    | 403     | INVALID_TRANSITION     |        |
+| 1005    | 501     | INVALID_INITIAL_STATUS |        |
+| 1007    | 704     | INVALID_TRANSITION     |        |
+| 1009    | 902     | INVALID_TRANSITION     |        |
+| 1009    | 903     | INVALID_TRANSITION     |        |
+| 1011    | 1102    | INVALID_TRANSITION     |        |
+
+&#x20;8 expected records = 8 actual records. No missing or extra records.
+
+## **3. Detailed SQL review**
+
+### **A.&#x20;**`OrderedEvents`**&#x20;CTE**
+
+Your use of:
+
+```
+LAG(OrderStatus) OVER (
+    PARTITION BY OrderID
+    ORDER BY EventDateTime, EventID
+) AS PreviousStatus
+```
+
+is exactly appropriate.
+
+It ensures that each event is compared against the immediately preceding event for the same order, even if the preceding event was invalid.
+
+**One unnecessary expression:**
+
+```
+DENSE_RANK() OVER (
+    PARTITION BY OrderID
+    ORDER BY EventDateTime, EventID
+) AS RNK
+```
+
+You calculate `RNK`, but never use it.
+
+This is not a correctness error. However, it introduces an unnecessary window calculation.
+
+You can remove it to simplify the query.
+
+### **B.&#x20;**`InvalidTransitions`**&#x20;CTE**
+
+Your `CASE` expression correctly implements the transition rules.
+
+For example:
+
+```
+WHEN PreviousStatus = 'CREATED'
+     AND CurrentStatus NOT IN ('CONFIRMED', 'CANCELLED')
+THEN 'INVALID_TRANSITION'
+```
+
+This correctly identifies `CREATED → SHIPPED` as invalid.
+
+You also correctly handled terminal statuses:
+
+```
+WHEN PreviousStatus IN ('DELIVERED', 'CANCELLED')
+THEN 'INVALID_TRANSITION'
+```
+
+This prevents further transitions after an order has reached a terminal state.
+
+**Minor observation:** Your condition `WHEN PreviousStatus = CurrentStatus` is redundant for the defined status vocabulary because the earlier transition checks already reject repeated statuses. It does not cause an error.
+
+### **C. Final SELECT**
+
+Your final filtering is correct:
+
+```
+WHERE ValidationStatus IS NOT NULL
+```
+
+This returns only invalid events while preserving the original event-level granularity.
+
+The final ordering is also correct.
+
+## **4. Correction points / learning log**
+
+| Skill                               | Assessment        |
+| ----------------------------------- | ----------------- |
+| Business requirement interpretation | Excellent         |
+| Event sequence processing           | Excellent         |
+| `LAG()` implementation              | Correct           |
+| `CASE` business rules               | Correct           |
+| NULL handling                       | Correct           |
+| Output grain                        | Correct           |
+| SQL simplification                  | Minor improvement |
+| Independent validation              | Correct           |
+
+**Principle learned:** In event-history validation, the immediately preceding event is the reference point for evaluating the current event. Invalid events must not automatically be removed from the sequence because doing so would change subsequent comparisons.
+
+One production consideration: your `PreviousStatus IS NULL` condition assumes stored statuses are non-NULL. The supplied dataset satisfies that assumption. In production, a nullable status column would require explicit handling to distinguish a missing previous event from a previous event whose status is NULL.
+
+## **5. Git checkpoint**
+
+**File:** `06_Data_Engineering/task-047-customer-order-lifecycle-validation.sql`
+
+```
+git add 06_Data_Engineering/task-047-customer-order-lifecycle-validation.sql
+git commit -m "Complete Task 47 customer order lifecycle validation"
+git push
+```
+
+## **Final assessment**
+
+**Task 47: 10/10 — completed and verified on the first attempt.**
+
+Your solution demonstrates strong control over event sequencing, window functions, and rule-based data validation.
+
+The only suggested improvements are removing unused calculations and simplifying redundant conditions. Neither affects your score.
+
+I will wait for your instruction before assigning Task 48.
+
+*/
+
+/*
+Yes. For **Task 47 — Customer Order Lifecycle Validation**, your original solution used `LAG()` to identify the previous status.
+
+We can solve the same problem using a **correlated subquery with&#x20;**`OUTER APPLY`, without using `LAG()`, `ROW_NUMBER()`, or `DENSE_RANK()`.
+
+## **Alternative Method 1 — OUTER APPLY**
+
+```
+WITH OrderedEvents AS
+(
+    SELECT
+        E.OrderID,
+        E.EventID,
+        E.EventDateTime,
+        P.OrderStatus AS PreviousStatus,
+        E.OrderStatus AS CurrentStatus
+    FROM #OrderStatusEvents E
+
+    OUTER APPLY
+    (
+        SELECT TOP (1)
+            P.OrderStatus
+        FROM #OrderStatusEvents P
+        WHERE P.OrderID = E.OrderID
+          AND (
+                P.EventDateTime < E.EventDateTime
+                OR (
+                    P.EventDateTime = E.EventDateTime
+                    AND P.EventID < E.EventID
+                )
+              )
+        ORDER BY
+            P.EventDateTime DESC,
+            P.EventID DESC
+    ) P
+),
+ValidationResults AS
+(
+    SELECT
+        OrderID,
+        EventID,
+        EventDateTime,
+        PreviousStatus,
+        CurrentStatus,
+        CASE
+            WHEN PreviousStatus IS NULL
+                 AND CurrentStatus <> 'CREATED'
+                THEN 'INVALID_INITIAL_STATUS'
+
+            WHEN PreviousStatus = 'CREATED'
+                 AND CurrentStatus NOT IN ('CONFIRMED', 'CANCELLED')
+                THEN 'INVALID_TRANSITION'
+
+            WHEN PreviousStatus = 'CONFIRMED'
+                 AND CurrentStatus NOT IN ('SHIPPED', 'CANCELLED')
+                THEN 'INVALID_TRANSITION'
+
+            WHEN PreviousStatus = 'SHIPPED'
+                 AND CurrentStatus <> 'DELIVERED'
+                THEN 'INVALID_TRANSITION'
+
+            WHEN PreviousStatus IN ('DELIVERED', 'CANCELLED')
+                THEN 'INVALID_TRANSITION'
+
+            ELSE NULL
+        END AS ValidationStatus
+    FROM OrderedEvents
+)
+SELECT
+    OrderID,
+    EventID,
+    EventDateTime,
+    PreviousStatus,
+    CurrentStatus,
+    ValidationStatus
+FROM ValidationResults
+WHERE ValidationStatus IS NOT NULL
+ORDER BY
+    OrderID,
+    EventDateTime,
+    EventID;
+```
+
+### **How OUTER APPLY works**
+
+Consider OrderID `1002`:
+
+| EventID | CurrentStatus | PreviousStatus |
+| ------- | ------------- | -------------- |
+| 201     | CREATED       | NULL           |
+| 202     | SHIPPED       | CREATED        |
+| 203     | DELIVERED     | SHIPPED        |
+
+For EventID `202`, the subquery searches for earlier events belonging to OrderID `1002`.
+
+It sorts them in descending chronological order and selects `TOP (1)`, which gives the immediately preceding event.
+
+`OUTER APPLY` preserves the first event even when no previous event exists.
+
+This produces the same previous-status relationship as `LAG()`.
+
+## **Alternative Method 2 — Self JOIN with NOT EXISTS**
+
+Another approach uses a self-join and an anti-existence condition to identify the immediately preceding event.
+
+```
+WITH EventHistory AS
+(
+    SELECT
+        E.OrderID,
+        E.EventID,
+        E.EventDateTime,
+        P.OrderStatus AS PreviousStatus,
+        E.OrderStatus AS CurrentStatus
+    FROM #OrderStatusEvents E
+    LEFT JOIN #OrderStatusEvents P
+        ON E.OrderID = P.OrderID
+       AND (
+            P.EventDateTime < E.EventDateTime
+            OR (
+                P.EventDateTime = E.EventDateTime
+                AND P.EventID < E.EventID
+            )
+       )
+       AND NOT EXISTS
+       (
+           SELECT 1
+           FROM #OrderStatusEvents X
+           WHERE X.OrderID = E.OrderID
+             AND (
+                 X.EventDateTime > P.EventDateTime
+                 OR (
+                     X.EventDateTime = P.EventDateTime
+                     AND X.EventID > P.EventID
+                 )
+             )
+             AND (
+                 X.EventDateTime < E.EventDateTime
+                 OR (
+                     X.EventDateTime = E.EventDateTime
+                     AND X.EventID < E.EventID
+                 )
+             )
+       )
+),
+ValidationResults AS
+(
+    SELECT
+        OrderID,
+        EventID,
+        EventDateTime,
+        PreviousStatus,
+        CurrentStatus,
+        CASE
+            WHEN PreviousStatus IS NULL
+                 AND CurrentStatus <> 'CREATED'
+                THEN 'INVALID_INITIAL_STATUS'
+
+            WHEN PreviousStatus = 'CREATED'
+                 AND CurrentStatus NOT IN ('CONFIRMED', 'CANCELLED')
+                THEN 'INVALID_TRANSITION'
+
+            WHEN PreviousStatus = 'CONFIRMED'
+                 AND CurrentStatus NOT IN ('SHIPPED', 'CANCELLED')
+                THEN 'INVALID_TRANSITION'
+
+            WHEN PreviousStatus = 'SHIPPED'
+                 AND CurrentStatus <> 'DELIVERED'
+                THEN 'INVALID_TRANSITION'
+
+            WHEN PreviousStatus IN ('DELIVERED', 'CANCELLED')
+                THEN 'INVALID_TRANSITION'
+
+            ELSE NULL
+        END AS ValidationStatus
+    FROM EventHistory
+)
+SELECT
+    OrderID,
+    EventID,
+    EventDateTime,
+    PreviousStatus,
+    CurrentStatus,
+    ValidationStatus
+FROM ValidationResults
+WHERE ValidationStatus IS NOT NULL
+ORDER BY OrderID, EventDateTime, EventID;
+```
+
+Here, `NOT EXISTS` ensures there is no event between the candidate previous event and the current event.
+
+### **Comparison of all three approaches**
+
+| Method        | Main technique            | Complexity | Practical use                                                    |
+| ------------- | ------------------------- | ---------- | ---------------------------------------------------------------- |
+| Your original | `LAG()`                   | Low        | Sequential event analysis                                        |
+| Alternative 1 | `OUTER APPLY` + `TOP (1)` | Medium     | Finding the most recent related record                           |
+| Alternative 2 | Self JOIN + `NOT EXISTS`  | High       | Understanding predecessor relationships without window functions |
+
+All three should return the same **8 invalid events** for Task 47.
+
+**My recommendation:** Keep your original `LAG()` solution as the primary implementation. It is simpler and communicates the requirement more directly. Learn `OUTER APPLY` as an alternative because it is useful for retrieving the latest related record in SQL Server.
+
+For large datasets, compare actual execution plans and logical reads before deciding which approach performs best. An index on `(OrderID, EventDateTime, EventID)` with `OrderStatus` included can help predecessor lookups.
+
+*/
