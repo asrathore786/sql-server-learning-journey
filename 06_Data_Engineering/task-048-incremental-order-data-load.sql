@@ -185,7 +185,7 @@ SELECT
     OrderAmount,
     OrderStatus,
     LastModifiedDate,
-    ROW_NUMBER() OVER (PARTITION BY OrderID ORDER BY LastModifiedDate DESC,SourceRecordID) AS RNK
+    ROW_NUMBER() OVER (PARTITION BY OrderID ORDER BY LastModifiedDate DESC,SourceRecordID DESC) AS RNK
 FROM #OrderSource S
 )
 
@@ -206,6 +206,7 @@ FROM SingleRecord S
 WHERE NOT EXISTS ( SELECT 1 FROM #OrderTarget T WHERE T.OrderID = S.OrderID)
 AND RNK = 1;
 
+SELECT @@ROWCOUNT AS RowsAffected;
 
 WITH SingleRecord AS
 (
@@ -220,15 +221,264 @@ FROM #OrderSource S
 )
 UPDATE T 
     SET
+    T.CustomerID = S.CustomerID,
     T.OrderAmount = S.OrderAmount,
     T.OrderStatus = S.OrderStatus,
     T.LastModifiedDate = S.LastModifiedDate
 FROM #OrderTarget T
 INNER JOIN SingleRecord S
 ON T.OrderID = S.OrderID
-WHERE EXISTS ( SELECT 1 FROM #OrderTarget T WHERE T.OrderID = S.OrderID)
-AND RNK = 1
+WHERE RNK = 1
 AND T.LastModifiedDate < S.LastModifiedDate;
 
+SELECT @@ROWCOUNT AS RowsAffected
 
 SELECT * FROM #OrderTarget
+ORDER BY OrderID;
+
+/*
+
+## **Task 48 — Final SQL Review (Attempt 4)**
+
+SQL logic score
+
+# **10/10**
+
+Assessment
+
+Logic validated
+
+Your fourth attempt resolves all previously identified SQL issues. The insert and update operations now use consistent, deterministic source selection, and the update synchronizes every required column.
+
+**Your SQL logic is correct. Actual SSMS execution and second-run idempotency are still awaiting verification.**
+
+### **1. Code review**
+
+| Requirement                              | Assessment          |
+| ---------------------------------------- | ------------------- |
+| Latest source record per order           | &#x20;Correct       |
+| Tie-breaker using highest SourceRecordID | &#x20;Correct       |
+| Insert only missing orders               | &#x20;Correct       |
+| Update only when source is newer         | &#x20;Correct       |
+| Update all required columns              | &#x20;Correct       |
+| Preserve target-only orders              | &#x20;Correct       |
+| Prevent duplicate source matches         | &#x20;Correct       |
+| Deterministic final output ordering      | &#x20;Correct       |
+| First-run counts                         | Pending SSMS output |
+| Second-run idempotency                   | Pending SSMS output |
+
+### **2. One improvement to your verification**
+
+You placed:
+
+```
+SELECT @@ROWCOUNT AS RowsAffected;
+```
+
+immediately after the `UPDATE`. That correctly captures the number of updated rows.
+
+However, you should also capture the number of inserted rows immediately after the `INSERT`.
+
+Use:
+
+```
+-- Immediately after INSERT
+SELECT @@ROWCOUNT AS InsertedRows;
+
+-- Immediately after UPDATE
+SELECT @@ROWCOUNT AS UpdatedRows;
+```
+
+On the initial execution, you should get:
+
+InsertedRows
+
+# **4**
+
+UpdatedRows
+
+# **3**
+
+On the second execution, both counts should be zero.
+
+**Important:** Run the first execution against the original eight-row target dataset. Do not recreate the temporary tables between the first and second executions.
+
+### **3. Learning log — Task 48**
+
+| Attempt | Score  | Main finding                                     |
+| ------- | ------ | ------------------------------------------------ |
+| 1       | 7/10   | Incorrect timestamp tie-breaker                  |
+| 2       | 6/10   | UPDATE joined multiple source records            |
+| 3       | 9.5/10 | Correct selection, missing CustomerID assignment |
+| 4       | 10/10  | All identified SQL logic issues resolved         |
+
+The most important principle from this exercise is **deterministic source selection before modifying target data**. Your earlier UPDATE demonstrated why joining multiple source versions to one target row can produce unreliable results.
+
+### **4. Git checkpoint**
+
+**File:** `06_Data_Engineering/task-048-incremental-order-data-load.sql`
+
+Save your final query, including the validation statements, then run:
+
+```
+git add 06_Data_Engineering/task-048-incremental-order-data-load.sql
+
+git commit -m "Complete Task 048 incremental order data load"
+
+git push origin main
+```
+
+### **5. Final verification required**
+
+Please share the SSMS output for:
+
+- First execution: `InsertedRows`, `UpdatedRows`, and final target records.
+- Second execution: `InsertedRows` and `UpdatedRows`.
+
+**Task 48 has passed the SQL logic review at 10/10.** The remaining step is to confirm the execution results and idempotency before marking the exercise fully completed.
+
+## **Task 48 — Execution Results Verified ✅**
+
+Final SQL assessment
+
+# **10/10**
+
+Status
+
+First run verified
+
+I reviewed both SSMS screenshots. Your first execution matches the expected results exactly.
+
+### **1. Actual vs. expected results**
+
+| Validation           | Expected | Actual     | Result  |
+| -------------------- | -------- | ---------- | ------- |
+| Records inserted     | 4        | 4          |         |
+| Records updated      | 3        | 3          |         |
+| Final target records | 12       | 12         |         |
+| Correct order values | 12       | 12         |         |
+| Second-run changes   | 0        | Not tested | Pending |
+
+All 12 displayed records match the expected output, including the previously problematic orders:
+
+- **1001:** COMPLETED, timestamp `2026-11-10 10:00:00`
+- **1004:** COMPLETED, timestamp `2026-11-11 09:00:00`
+- **1012:** COMPLETED, timestamp `2026-11-15 10:00:00`
+
+The Messages screenshot also confirms that the database executed the insert and update operations successfully.
+
+### **2. One remaining validation — Idempotency**
+
+Run your final INSERT and UPDATE statements again **without recreating either temporary table**.
+
+Expected:
+
+Second-run inserts
+
+# **0**
+
+Second-run updates
+
+# **0**
+
+If both return zero, your synchronization is confirmed idempotent.
+
+### **3. Final learning log**
+
+| Attempt | Score  | Learning                                         |
+| ------- | ------ | ------------------------------------------------ |
+| 1       | 7/10   | Correct source-record tie-breaking               |
+| 2       | 6/10   | Prevent multiple source rows matching one target |
+| 3       | 9.5/10 | Synchronize every required column                |
+| 4       | 10/10  | Correct incremental INSERT and UPDATE            |
+
+**Key principle mastered:** Deterministic deduplication followed by conditional target synchronization.
+
+### **4. Git checkpoint**
+
+Save your final solution as:
+
+`06_Data_Engineering/task-048-incremental-order-data-load.sql`
+
+```
+git add 06_Data_Engineering/task-048-incremental-order-data-load.sql
+git commit -m "Complete Task 048 incremental order data load"
+git push origin main
+```
+
+**Assessment:** Task 48 has passed SQL logic and first-run execution validation. Only the second-run idempotency check remains before full completion.
+
+Share the second-run results to close Task 48.
+
+## **Task 48 — Successfully Completed ✅**
+
+Final score
+
+# **10/10**
+
+Status
+
+Fully validated
+
+I reviewed both second-run SSMS screenshots. Your synchronization is now **confirmed idempotent**.
+
+### **1. Final execution verification**
+
+| Validation       | First run | Second run | Result |
+| ---------------- | --------- | ---------- | ------ |
+| Records inserted | 4         | 0          |        |
+| Records updated  | 3         | 0          |        |
+| Target records   | 12        | 12         |        |
+| Data accuracy    | Correct   | Unchanged  |        |
+| Idempotency      | —         | Confirmed  |        |
+
+Your second execution produced zero inserts and zero updates, while preserving all 12 target records.
+
+This satisfies every acceptance criterion for Task 48.
+
+### **2. Final learning record**
+
+| Attempt | Score  | Main correction                    |
+| ------- | ------ | ---------------------------------- |
+| 1       | 7/10   | SourceRecordID tie-breaker         |
+| 2       | 6/10   | Multiple source matches in UPDATE  |
+| 3       | 9.5/10 | Missing CustomerID synchronization |
+| 4       | 10/10  | All SQL logic corrected            |
+
+**Principles demonstrated:** deterministic source deduplication, safe incremental loading, controlled join cardinality, conditional updates, and idempotent ETL execution.
+
+One important distinction: the test confirms idempotency for this dataset and unchanged source data. Production pipelines would additionally require transaction handling, concurrency controls, and error recovery.
+
+### **3. Save your completed task to GitHub**
+
+**Repository:** `asrathore786/sql-server-learning-journey`
+
+**File:** `06_Data_Engineering/task-048-incremental-order-data-load.sql`
+
+Run:
+
+```
+git add 06_Data_Engineering/task-048-incremental-order-data-load.sql
+
+git commit -m "Complete Task 048 - Incremental Order Data Load"
+
+git push origin main
+
+git status
+```
+
+Expected final Git status:
+
+```
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+```
+
+This assumes no other uncommitted changes remain.
+
+**Task 48 is officially complete.** No further corrections are required. Task 49 will be assigned only when you request it.
+
+
+*/
